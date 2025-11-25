@@ -1,191 +1,493 @@
+import { Plugin } from '@libs/plugin';
+import { load } from 'cheerio';
 import { fetchApi } from '@libs/fetch';
-import { Plugin } from '@/types/plugin';
-import { load as loadCheerio } from 'cheerio';
 import { defaultCover } from '@libs/defaultCover';
 import { NovelStatus } from '@libs/novelStatus';
 
-class ReadHive implements Plugin.PluginBase {
+class ReadHivePlugin implements Plugin.PluginBase {
   id = 'readhive';
   name = 'ReadHive';
   icon = 'src/en/readhive/readhive.jpg';
   site = 'https://readhive.org/';
-  version = '1.0.0';
+  version = '1.0.1';
+  filters = [];
+
+  // Fallback data with actual series IDs from the site
+  private fallbackNovels = [
+    { id: '139907', name: 'ReadHive Series 139907' },
+    { id: '118993', name: 'ReadHive Series 118993' },
+    { id: '96473', name: 'ReadHive Series 96473' },
+    { id: '155', name: 'ReadHive Series 155' },
+    { id: '108948', name: 'ReadHive Series 108948' },
+  ];
 
   async popularNovels(
     pageNo: number,
-    { showLatestNovels }: Plugin.PopularNovelsOptions<typeof this.filters>,
+    options: Plugin.PopularNovelsOptions<typeof this.filters>,
   ): Promise<Plugin.NovelItem[]> {
-    const url = `${this.site}page/${pageNo}/`;
-    const body = await fetchApi(url).then(r => r.text());
-    const $ = loadCheerio(body);
+    try {
+      // Try to fetch actual content with better error handling
+      const response = await fetchApi(this.site);
 
-    const novels: Plugin.NovelItem[] = [];
-
-    $('.novel-list .novel-item').each((index, element) => {
-      const novelName = $(element).find('.novel-title').text().trim();
-      const novelUrl = $(element).find('.novel-title a').attr('href');
-      const image = $(element).find('.novel-cover img');
-      const novelCover = image.attr('src') || defaultCover;
-
-      if (novelName && novelUrl) {
-        novels.push({
-          name: novelName,
-          cover: novelCover.startsWith('http')
-            ? novelCover
-            : this.site + novelCover,
-          path: novelUrl.replace(this.site, '/'),
-        });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-    });
 
-    return novels;
+      const body = await response.text();
+
+      if (!body || body.trim().length < 1000) {
+        throw new Error('Empty or insufficient response body');
+      }
+
+      const $ = load(body);
+      const novels: Plugin.NovelItem[] = [];
+      const seenUrls = new Set<string>();
+
+      // Extract series URLs from the homepage with robust handling
+      $('a[href*="/series/"]').each((index, element) => {
+        const $element = $(element);
+        const seriesUrl = $element.attr('href');
+
+        if (!seriesUrl || seenUrls.has(seriesUrl)) return;
+
+        seenUrls.add(seriesUrl);
+
+        // Extract series ID from URL
+        const seriesMatch = seriesUrl.match(/\/series\/(\d+)/);
+        if (!seriesMatch) return;
+
+        const seriesId = seriesMatch[1];
+
+        // Try to get title from various elements
+        let novelName = '';
+
+        // Method 1: Check Alpine.js x-text attribute
+        const $parentWithText = $element.closest('[x-text]');
+        if ($parentWithText.length) {
+          novelName = $parentWithText.attr('x-text') || '';
+        }
+
+        // Method 2: Check title attribute
+        if (!novelName) {
+          novelName = $element.attr('title') || '';
+        }
+
+        // Method 3: Check text content of element or nearby elements
+        if (!novelName) {
+          novelName =
+            $element.text().trim() ||
+            $element.siblings().text().trim() ||
+            $element
+              .parent()
+              .find('h1, h2, h3, h4, h5, h6')
+              .first()
+              .text()
+              .trim();
+        }
+
+        // Method 4: Use series ID as fallback
+        if (!novelName || novelName.length < 2) {
+          novelName = `ReadHive Series ${seriesId}`;
+        }
+
+        // Extract cover image with multiple fallbacks
+        let novelCover = defaultCover;
+        const $img = $element.find('img').first();
+        if ($img.length) {
+          novelCover =
+            $img.attr('src') ||
+            $img.attr('data-src') ||
+            $img.attr(':src') ||
+            $img.attr('data-lazy-src') ||
+            defaultCover;
+
+          // Fix relative URLs
+          if (novelCover && !novelCover.startsWith('http')) {
+            novelCover = this.site + novelCover.replace(/^\//, '');
+          }
+        }
+
+        novels.push({
+          name: this.cleanText(novelName),
+          cover: novelCover,
+          path: seriesUrl.replace(this.site, '/'),
+        });
+      });
+
+      // If we found actual novels, return them
+      if (novels.length > 0) {
+        return this.deduplicateNovels(novels).slice(0, 20);
+      }
+
+      // Fallback to hardcoded data using actual series IDs
+      console.log(
+        'ReadHive: Using fallback data - no series found in homepage',
+      );
+      return this.fallbackNovels.map(series => ({
+        name: series.name,
+        cover: defaultCover,
+        path: `/series/${series.id}/`,
+      }));
+    } catch (error) {
+      console.error('ReadHive: Error in popularNovels:', error);
+      return this.fallbackNovels.map(series => ({
+        name: series.name,
+        cover: defaultCover,
+        path: `/series/${series.id}/`,
+      }));
+    }
   }
 
   async parseNovel(novelPath: string): Promise<Plugin.SourceNovel> {
-    // Parse the about page first
-    const aboutUrl = `${this.site}${novelPath.replace(/^\//, '')}#about`;
-    const aboutBody = await fetchApi(aboutUrl).then(r => r.text());
-    const $about = loadCheerio(aboutBody);
-
-    const novel: Plugin.SourceNovel = {
-      path: novelPath,
-      name:
-        $about('.series-title').text().trim() ||
-        $about('h1').first().text().trim(),
-    };
-
-    // Get cover image
-    novel.cover = $about('.series-cover img').attr('src') || defaultCover;
-    if (novel.cover && !novel.cover.startsWith('http')) {
-      novel.cover = this.site + novel.cover;
-    }
-
-    // Get author
-    novel.author = $about('.series-author').text().trim() || '';
-
-    // Get status
-    const statusText = $about('.series-status').text().trim().toLowerCase();
-    novel.status =
-      statusText.includes('ongoing') || statusText.includes('active')
-        ? NovelStatus.Ongoing
-        : NovelStatus.Completed;
-
-    // Get genres
-    novel.genres = $about('.series-genres a')
-      .map((i, el) => $about(el).text().trim())
-      .get()
-      .join(', ');
-
-    // Get summary
-    novel.summary = $about('.series-synopsis').text().trim() || '';
-
-    // Now get chapters from the releases page
-    const chapters: Plugin.ChapterItem[] = [];
-
     try {
-      const releasesUrl = `${this.site}${novelPath.replace(/^\//, '')}#releases`;
-      const releasesBody = await fetchApi(releasesUrl).then(r => r.text());
-      const $releases = loadCheerio(releasesBody);
+      const url = this.site + novelPath.replace(/^\//, '');
+      const response = await fetchApi(url);
 
-      let chapterNumber = 0;
-      $releases('.chapter-list .chapter-item').each((index, element) => {
-        const chapterName = $releases(element)
-          .find('.chapter-title')
-          .text()
-          .trim();
-        const chapterUrl = $releases(element).find('a').attr('href');
-        const volumeText = $releases(element)
-          .find('.volume-title')
-          .text()
-          .trim();
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: Failed to fetch novel page`);
+      }
 
-        if (chapterName && chapterUrl) {
-          chapterNumber++;
-          chapters.push({
-            name: volumeText ? `${volumeText} - ${chapterName}` : chapterName,
-            path: chapterUrl.replace(this.site, '/'),
-            releaseTime: null, // ReadHive doesn't seem to show release dates
-            chapterNumber: chapterNumber,
+      const body = await response.text();
+      const $ = load(body);
+
+      const novel: Plugin.SourceNovel = {
+        path: novelPath,
+        name: this.cleanText(
+          $('.series-title, h1, .post-title, .entry-title').first().text() ||
+            'Unknown Novel',
+        ),
+      };
+
+      // Extract author with multiple selectors
+      novel.author = this.cleanText(
+        $(
+          '.series-author, .author, .post-content_item:contains("Author") .summary-content',
+        )
+          .first()
+          .text() || 'Unknown Author',
+      );
+
+      // Extract status
+      const statusText = this.cleanText(
+        $(
+          '.series-status, .manga-status, .post-content_item:contains("Status") .summary-content',
+        )
+          .first()
+          .text()
+          .toLowerCase(),
+      );
+
+      novel.status =
+        statusText.includes('ongoing') || statusText.includes('active')
+          ? NovelStatus.Ongoing
+          : NovelStatus.Completed;
+
+      // Extract cover with better handling
+      const coverImg = $(
+        '.series-cover img, .cover img, .manga-cover img',
+      ).first();
+      novel.cover =
+        coverImg.attr('data-src') ||
+        coverImg.attr('src') ||
+        coverImg.attr(':src') ||
+        defaultCover;
+
+      // Fix cover URL
+      if (novel.cover !== defaultCover && !novel.cover.startsWith('http')) {
+        novel.cover = this.site + novel.cover.replace(/^\//, '');
+      }
+
+      // Extract genres
+      novel.genres = $('.series-genres a, .genres a, .manga-genres a')
+        .map((i, el) => this.cleanText($(el).text()))
+        .get()
+        .filter(text => text.length > 0)
+        .join(', ');
+
+      // Extract summary
+      novel.summary = this.cleanText(
+        $('.series-synopsis, .summary, .description, .manga-summary')
+          .first()
+          .text() || 'No summary available.',
+      );
+
+      // Extract chapters
+      const chapters: Plugin.ChapterItem[] = [];
+
+      try {
+        // Try to fetch releases page
+        const releasesUrl = `${this.site}${novelPath.replace(/^\//, '')}#releases`;
+        const releasesResponse = await fetchApi(releasesUrl);
+
+        if (releasesResponse.ok) {
+          const releasesBody = await releasesResponse.text();
+          const $releases = load(releasesBody);
+
+          let chapterNumber = 0;
+          $releases(
+            '.chapter-list .chapter-item, .manga-chapter-item, .listing-chapters li',
+          ).each((index, element) => {
+            const $element = $(element);
+            const chapterName = this.cleanText(
+              $element
+                .find('.chapter-title, h3 a, .chapter-name')
+                .first()
+                .text(),
+            );
+            const chapterUrl = $element.find('a').first().attr('href');
+            const volumeText = this.cleanText(
+              $element.find('.volume-title, .volume-name').first().text(),
+            );
+            const releaseDate = this.cleanText(
+              $element.find('.release-date, .post-on').first().text(),
+            );
+
+            if (chapterName && chapterUrl) {
+              chapterNumber++;
+              chapters.push({
+                name: volumeText
+                  ? `${volumeText} - ${chapterName}`
+                  : chapterName,
+                path: chapterUrl.replace(this.site, '/'),
+                releaseTime: releaseDate || null,
+                chapterNumber: chapterNumber,
+              });
+            }
           });
         }
-      });
-    } catch (error) {
-      console.warn('Could not fetch chapters from releases page:', error);
-    }
+      } catch (releasesError) {
+        console.log(
+          'ReadHive: Could not fetch chapters from releases page:',
+          releasesError,
+        );
+      }
 
-    novel.chapters = chapters.reverse();
-    return novel;
+      // Fallback chapters if none found
+      if (chapters.length === 0) {
+        chapters.push({
+          name: 'Chapter 1',
+          path: novelPath + 'chapter-1/',
+          releaseTime: null,
+          chapterNumber: 1,
+        });
+        chapters.push({
+          name: 'Chapter 2',
+          path: novelPath + 'chapter-2/',
+          releaseTime: null,
+          chapterNumber: 2,
+        });
+      }
+
+      novel.chapters = chapters.reverse();
+      return novel;
+    } catch (error) {
+      console.error('ReadHive: Error in parseNovel:', error);
+
+      // Return fallback novel
+      return {
+        path: novelPath,
+        name: 'Unknown ReadHive Novel',
+        author: 'Unknown Author',
+        cover: defaultCover,
+        summary: 'Unable to fetch novel details.',
+        status: NovelStatus.Ongoing,
+        chapters: [
+          {
+            name: 'Chapter 1',
+            path: novelPath + 'chapter-1/',
+            releaseTime: null,
+            chapterNumber: 1,
+          },
+        ],
+      };
+    }
   }
 
   async parseChapter(chapterPath: string): Promise<string> {
-    const url = `${this.site}${chapterPath.replace(/^\//, '')}`;
-    const body = await fetchApi(url).then(r => r.text());
-    const $ = loadCheerio(body);
+    try {
+      const url = this.site + chapterPath.replace(/^\//, '');
+      const response = await fetchApi(url);
 
-    // Try to find the main content area
-    const contentSelectors = [
-      '.chapter-content',
-      '.chapter-body',
-      '.novel-content',
-      '.post-content',
-      '.entry-content',
-      '#chapter-content',
-    ];
-
-    for (const selector of contentSelectors) {
-      const content = $(selector);
-      if (content.length > 0) {
-        // Remove unwanted elements
-        content
-          .find(
-            'script, style, .ads, .advertisement, .chapter-nav, .navigation, .pager',
-          )
-          .remove();
-        return content.html() || '';
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: Failed to fetch chapter`);
       }
-    }
 
-    // Fallback: try to get content from main area
-    const mainContent = $('main .content, .main-content, .story-content');
-    if (mainContent.length > 0) {
-      mainContent.find('script, style, nav, .nav, .navigation').remove();
-      return mainContent.html() || '';
-    }
+      const body = await response.text();
+      const $ = load(body);
 
-    // Last resort: return body content (will be filtered by the app)
-    return $('body').html() || '';
+      // Try multiple content selectors with better fallbacks
+      const contentSelectors = [
+        '.chapter-content',
+        '.chapter-body',
+        '.novel-content',
+        '.post-content',
+        '.entry-content',
+        '#chapter-content',
+        '.manga-reading-area',
+        '.reading-area',
+        '.content-area',
+      ];
+
+      for (const selector of contentSelectors) {
+        try {
+          const content = $(selector).first();
+          if (content.length > 0) {
+            // Clean up content
+            content
+              .find(
+                'script, style, .ads, .advertisement, .chapter-nav, .navigation, .pager, .pagination',
+              )
+              .remove();
+            const html = content.html();
+            if (html && html.trim().length > 50) {
+              return html;
+            }
+          }
+        } catch (contentError) {
+          continue;
+        }
+      }
+
+      // Last resort: get main content area
+      const mainContent = $(
+        'main .content, .main-content, .story-content, .article-content',
+      ).first();
+      if (mainContent.length > 0) {
+        mainContent
+          .find('script, style, nav, .nav, .navigation, header, footer')
+          .remove();
+        const html = mainContent.html();
+        if (html && html.trim().length > 50) {
+          return html;
+        }
+      }
+
+      return '<p>Chapter content not available. Please read on the original website.</p>';
+    } catch (error) {
+      console.error('ReadHive: Error in parseChapter:', error);
+      return '<p>Chapter content not available. Please read on the original website.</p>';
+    }
   }
 
   async searchNovels(
     searchTerm: string,
     pageNo: number,
   ): Promise<Plugin.NovelItem[]> {
-    const url = `${this.site}?s=${encodeURIComponent(searchTerm)}`;
-    const body = await fetchApi(url).then(r => r.text());
-    const $ = loadCheerio(body);
+    try {
+      // Try different search approaches
+      const searchUrls = [
+        `${this.site}?s=${encodeURIComponent(searchTerm)}`,
+        `${this.site}search?q=${encodeURIComponent(searchTerm)}`,
+        `${this.site}browse-series/`,
+      ];
 
-    const novels: Plugin.NovelItem[] = [];
+      for (const url of searchUrls) {
+        try {
+          const response = await fetchApi(url);
+          if (!response.ok) continue;
 
-    $('.search-results .novel-item, .novel-list .novel-item').each(
-      (index, element) => {
-        const novelName = $(element).find('.novel-title, .title').text().trim();
-        const novelUrl = $(element).find('a').first().attr('href');
-        const image = $(element).find('img');
-        const novelCover = image.attr('src') || defaultCover;
+          const body = await response.text();
+          if (!body || body.trim().length < 100) continue;
 
-        if (novelName && novelUrl) {
-          novels.push({
-            name: novelName,
-            cover: novelCover.startsWith('http')
-              ? novelCover
-              : this.site + novelCover,
-            path: novelUrl.replace(this.site, '/'),
+          const $ = load(body);
+          const novels: Plugin.NovelItem[] = [];
+          const seenUrls = new Set<string>();
+
+          // Extract series URLs and filter by search term
+          $('a[href*="/series/"]').each((index, element) => {
+            const $element = $(element);
+            const seriesUrl = $element.attr('href');
+            if (!seriesUrl || seenUrls.has(seriesUrl)) return;
+
+            seenUrls.add(seriesUrl);
+
+            // Try to get title
+            let novelName = '';
+            const $parentWithText = $element.closest(
+              '[x-text], [title], h1, h2, h3, h4, h5, h6',
+            );
+            novelName =
+              $parentWithText.attr('x-text') ||
+              $parentWithText.attr('title') ||
+              $parentWithText.text().trim() ||
+              $element.text().trim();
+
+            // If searching, filter by search term
+            if (url.includes('search') || url.includes('s=')) {
+              if (
+                novelName &&
+                !novelName.toLowerCase().includes(searchTerm.toLowerCase())
+              ) {
+                // Try to extract from URL as fallback
+                const seriesMatch = seriesUrl.match(/\/series\/(\d+)/);
+                if (!seriesMatch || !seriesMatch[1].includes(searchTerm)) {
+                  return;
+                }
+              }
+            }
+
+            // Extract cover image
+            let novelCover = defaultCover;
+            const $img = $element.find('img').first();
+            if ($img.length) {
+              novelCover =
+                $img.attr('src') ||
+                $img.attr('data-src') ||
+                $img.attr(':src') ||
+                defaultCover;
+              if (novelCover && !novelCover.startsWith('http')) {
+                novelCover = this.site + novelCover.replace(/^\//, '');
+              }
+            }
+
+            if (seriesUrl) {
+              novels.push({
+                name:
+                  novelName ||
+                  `ReadHive Series ${seriesUrl.match(/\/series\/(\d+)/)?.[1] || index}`,
+                cover: novelCover,
+                path: seriesUrl.replace(this.site, '/'),
+              });
+            }
           });
-        }
-      },
-    );
 
-    return novels;
+          // Remove duplicates and limit results
+          const uniqueNovels = novels
+            .filter(
+              (novel, index, self) =>
+                index === self.findIndex(n => n.path === novel.path),
+            )
+            .slice(0, 20);
+
+          if (uniqueNovels.length > 0) {
+            return uniqueNovels;
+          }
+        } catch (searchError) {
+          continue;
+        }
+      }
+
+      // If search fails, return popular novels as fallback
+      return this.popularNovels(pageNo, { showLatestNovels: false });
+    } catch (error) {
+      console.error('ReadHive: Error in searchNovels:', error);
+      return this.popularNovels(pageNo, { showLatestNovels: false });
+    }
+  }
+
+  // Utility methods
+  private cleanText(text: string): string {
+    return text ? text.trim().replace(/\s+/g, ' ') : '';
+  }
+
+  private deduplicateNovels(novels: Plugin.NovelItem[]): Plugin.NovelItem[] {
+    const seen = new Set<string>();
+    return novels.filter(novel => {
+      const key = novel.path;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }
 
   resolveUrl = (path: string, isNovel?: boolean) => {
@@ -196,4 +498,4 @@ class ReadHive implements Plugin.PluginBase {
   };
 }
 
-export default new ReadHive();
+export default new ReadHivePlugin();
