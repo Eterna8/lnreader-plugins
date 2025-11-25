@@ -246,6 +246,8 @@ import p_243 from '@plugins/vietnamese/lightnovelvn';
 import p_244 from '@plugins/vietnamese/nettruyen';
 import p_245 from '@plugins/vietnamese/truyenchu';
 import p_246 from '@plugins/vietnamese/truyenfull';
+import p_247 from '@plugins/english/Readhive';
+import p_248 from '@plugins/english/BelleRepository';
 
 const PLUGINS: Plugin.PluginBase[] = [
   p_0,
@@ -495,5 +497,7 @@ const PLUGINS: Plugin.PluginBase[] = [
   p_244,
   p_245,
   p_246,
+  p_247,
+  p_248,
 ];
 export default PLUGINS;
