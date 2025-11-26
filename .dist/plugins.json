@@ -1023,9 +1023,9 @@
 		"name": "ReadHive",
 		"site": "https://readhive.org",
 		"lang": "English",
-		"version": "1.0.6",
+		"version": "1.0.9",
 		"url": "https://raw.githubusercontent.com/Eterna8/ext/master/.js/src/plugins/english/ReadHive.js",
-		"iconUrl": "https://raw.githubusercontent.com/Eterna8/ext/master/public/static/src/en/readhive.png"
+		"iconUrl": "https://raw.githubusercontent.com/Eterna8/ext/master/public/static/src/en/readhive/icon.png"
 	},
 	{
 		"id": "readnovelfull",
