@@ -19,8 +19,8 @@ const USER_CONTENT_LINK = process.env.USER_CONTENT_BASE
   : `https://raw.githubusercontent.com/${USERNAME}/${REPO}/${CURRENT_BRANCH}`;
 
 const STATIC_LINK = `${USER_CONTENT_LINK}/public/static`;
-// Use correct .js/plugins path
-const PLUGIN_LINK = `${USER_CONTENT_LINK}/.js/plugins`;
+// Use legacy .js/src/plugins path for backward compatibility
+const PLUGIN_LINK = `${USER_CONTENT_LINK}/.js/src/plugins`;
 
 const DIST_DIR = '.dist';
 
@@ -107,22 +107,15 @@ for (let language in languages) {
       `${COMPILED_PLUGIN_DIR}/${language.toLowerCase()}/${plugin}`,
       'utf-8',
     );
-    let instance;
-    try {
-      instance = Function(
-        'require',
-        'module',
-        `const exports = module.exports = {};
-        ${rawCode};
-        return exports.default`,
-      )(_require, {});
-    } catch (error) {
-      console.error(`Error evaluating ${plugin}: ${error.message}`);
-      console.log(`Skipping ${plugin} due to syntax error`);
-      return;
-    }
+    const instance = Function(
+      'require',
+      'module',
+      `const exports = module.exports = {}; 
+      ${rawCode}; 
+      return exports.default`,
+    )(_require, {});
     const { id, name, site, version, icon, customJS, customCSS, filters } =
-      instance || {};
+      instance;
     const normalisedName = name.replace(/\[.*\]/, '');
 
     // --only-new logic
