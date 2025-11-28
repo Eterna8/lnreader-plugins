@@ -12,7 +12,9 @@
       "Bash(git tag:*)",
       "Bash(grep:*)",
       "WebFetch(domain:github.com)",
-      "Bash(sed:*)"
+      "Bash(sed:*)",
+      "Bash(npm run dev:start:*)",
+      "WebFetch(domain:readhive.org)"
     ],
     "deny": [],
     "ask": []

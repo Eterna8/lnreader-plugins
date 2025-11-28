@@ -1,0 +1,1 @@
+- Always refer to the docs and templates in the repo before editing files.
