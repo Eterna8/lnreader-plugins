@@ -27,12 +27,11 @@ class ReadHivePlugin implements Plugin.PluginBase {
     const url = `${this.site}/?page=${pageNo}`;
     const result = await fetchApi(url);
     const body = await result.text();
-    const $ = loadCheerio(body);
-
-    $('article.bs').each((i, el) => {
-      const name = $(el).find('.ntitle').text().trim();
-      const path = $(el).find('a').attr('href')?.substring(this.site.length);
+    $('div.col-6.col-md-3.mb-4').each((i, el) => {
+      const name = $(el).find('h5').text().trim();
+      const path = $(el).find('a').attr('href');
       let cover = $(el).find('img').attr('src');
+
       if (cover && !cover.startsWith('http')) {
         cover = this.resolveUrl(cover);
       }
@@ -53,10 +52,11 @@ class ReadHivePlugin implements Plugin.PluginBase {
     const $ = loadCheerio(body);
 
     const novels: Plugin.NovelItem[] = [];
-    $('article.bs').each((i, el) => {
-      const name = $(el).find('.ntitle').text().trim();
-      const path = $(el).find('a').attr('href')?.substring(this.site.length);
+    $('div.col-6.col-md-3.mb-4').each((i, el) => {
+      const name = $(el).find('h5').text().trim();
+      const path = $(el).find('a').attr('href');
       let cover = $(el).find('img').attr('src');
+
       if (cover && !cover.startsWith('http')) {
         cover = this.resolveUrl(cover);
       }
@@ -78,12 +78,14 @@ class ReadHivePlugin implements Plugin.PluginBase {
     const body = await result.text();
     const $ = loadCheerio(body);
 
-    novel.name = $('.entry-title').text().trim();
-    novel.cover = $('img.wp-post-image').attr('src') || defaultCover;
+    novel.name = $('h1.name').text().trim();
+    novel.cover = this.resolveUrl(
+      $('img.series-cover').attr('src') || defaultCover,
+    );
 
-    $('.spe > span').each(function () {
-      const detailName = $(this).find('b').text().trim();
-      const detailValue = $(this).find('b').remove().end().text().trim();
+    $('div.extra a').each(function () {
+      const detailName = $(this).find('span.name').text().trim();
+      const detailValue = $(this).find('span.value').text().trim();
 
       switch (detailName) {
         case 'Author':
@@ -102,18 +104,18 @@ class ReadHivePlugin implements Plugin.PluginBase {
     });
 
     const genres: string[] = [];
-    $('.genxed > a').each(function () {
+    $('a.tag[href*="genre"]').each(function () {
       genres.push($(this).text());
     });
     novel.genres = genres.join(', ');
 
-    novel.summary = $('.entry-content p').text().trim();
+    novel.summary = $('.summary-content').text().trim();
 
     const chapters: Plugin.ChapterItem[] = [];
-    $('#releases ul > li').each((i, el) => {
-      const chapterName = $(el).find('.chapternum').text().trim();
-      const chapterPath = $(el).find('a').attr('href');
-      const releaseDate = $(el).find('.chapterdate').text().trim();
+    $('#releases a.chapter-link').each((i, el) => {
+      const chapterName = $(el).find('span.chapter-title').text().trim();
+      const chapterPath = $(el).attr('href');
+      const releaseDate = $(el).find('span.chapter-update').text().trim();
 
       if (chapterPath) {
         chapters.push({
@@ -134,10 +136,10 @@ class ReadHivePlugin implements Plugin.PluginBase {
     const body = await result.text();
     const $ = loadCheerio(body);
 
-    const content = $('#content');
-    content
-      .find('p:contains("Previous Chapter"), p:contains("Next Chapter")')
-      .remove();
+    const content = $('div.text-left');
+    content.find('div.socials').remove();
+    content.find('div.reader-settings').remove();
+    content.find('div.nav-wrapper').remove();
 
     return content.html() || '';
   }
