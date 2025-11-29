@@ -23,22 +23,48 @@ class ReadHivePlugin implements Plugin.PluginBase {
     options: Plugin.PopularNovelsOptions<typeof this.filters>,
   ): Promise<Plugin.NovelItem[]> {
     const novels: Plugin.NovelItem[] = [];
+    if (pageNo > 1) return novels;
 
-    const url = `${this.site}/?page=${pageNo}`;
+    const url = this.site;
     const result = await fetchApi(url);
     const body = await result.text();
-    $('div.col-6.col-md-3.mb-4').each((i, el) => {
-      const name = $(el).find('h5').text().trim();
-      const path = $(el).find('a').attr('href');
-      let cover = $(el).find('img').attr('src');
+    const $ = loadCheerio(body);
 
-      if (cover && !cover.startsWith('http')) {
-        cover = this.resolveUrl(cover);
-      }
-      if (path) {
-        novels.push({ name, path, cover: cover || defaultCover });
-      }
-    });
+    if (options.showLatestNovels) {
+      $('h2:contains("Latest Updates")')
+        .next('div.flex.flex-wrap')
+        .children('div.flex.flex-col.w-full.px-2.mb-4')
+        .each((i, el) => {
+          const name = $(el).find('a.text-lg.font-medium').text().trim();
+          const path = $(el).find('a.peer').attr('href');
+          let cover = $(el).find('img').attr('src');
+
+          if (cover && !cover.startsWith('http')) {
+            cover = this.resolveUrl(cover);
+          }
+          if (path) {
+            novels.push({ name, path, cover: cover || defaultCover });
+          }
+        });
+    } else {
+      $('h2:contains("Popular This Month")')
+        .nextAll('div')
+        .find('.swiper-slide.w-32.flex-shrink-0.group')
+        .each((i, el) => {
+          const name = $(el).find('h6.mt-2.text-sm.font-medium').text().trim();
+          const path = $(el).find('a').attr('href');
+          let cover = $(el).find('img').attr('src');
+
+          if (cover && !cover.startsWith('http')) {
+            cover = this.resolveUrl(cover);
+          }
+          if (path) {
+            if (!novels.some(novel => novel.path === path)) {
+              novels.push({ name, path, cover: cover || defaultCover });
+            }
+          }
+        });
+    }
 
     return novels;
   }
@@ -73,58 +99,89 @@ class ReadHivePlugin implements Plugin.PluginBase {
       name: 'UNKNOWN',
       chapters: [],
     };
-    const url = this.resolveUrl(novelPath);
+
+    // Check if this is a spliced novel or normal novel and fetch the appropriate page
+    const isSplicedNovel = novelPath.includes('/series/');
+    let url: string;
+
+    if (isSplicedNovel) {
+      // For series pages, check if we need to add #releases for chapter list
+      url = this.resolveUrl(
+        novelPath + (novelPath.includes('#') ? '' : '#releases'),
+      );
+    } else {
+      url = this.resolveUrl(novelPath);
+    }
+
     const result = await fetchApi(url);
     const body = await result.text();
     const $ = loadCheerio(body);
 
-    novel.name = $('h1.name').text().trim();
+    // Get novel name from the main page (without hash)
+    const mainPageUrl = this.resolveUrl(novelPath.split('#')[0]);
+    const mainResult = await fetchApi(mainPageUrl);
+    const mainBody = await mainResult.text();
+    const $main = loadCheerio(mainBody);
+
+    novel.name = $main('h1.flex-grow.flex-shrink.mb-1.text-2xl.font-bold')
+      .text()
+      .trim();
     novel.cover = this.resolveUrl(
-      $('img.series-cover').attr('src') || defaultCover,
+      $main('div.rounded.overflow-hidden img').attr('src') || defaultCover,
     );
+    novel.author = $main('span.leading-7').text().trim();
 
-    $('div.extra a').each(function () {
-      const detailName = $(this).find('span.name').text().trim();
-      const detailValue = $(this).find('span.value').text().trim();
-
-      switch (detailName) {
-        case 'Author':
-          novel.author = detailValue;
-          break;
-        case 'Status':
-          if (detailValue.toLowerCase().includes('ongoing')) {
-            novel.status = NovelStatus.Ongoing;
-          } else if (detailValue.toLowerCase().includes('completed')) {
-            novel.status = NovelStatus.Completed;
-          } else {
-            novel.status = NovelStatus.Unknown;
-          }
-          break;
-      }
-    });
+    const summaryParagraphs: string[] = [];
+    $main('h2:contains("Synopsis")')
+      .next('div.mb-4')
+      .find('p')
+      .each((i, el) => {
+        summaryParagraphs.push($(el).text().trim());
+      });
+    novel.summary = summaryParagraphs.join('\n');
 
     const genres: string[] = [];
-    $('a.tag[href*="genre"]').each(function () {
+    $main('div.flex.flex-wrap a.px-3.py-1.mb-1.mr-2').each(function () {
       genres.push($(this).text());
     });
     novel.genres = genres.join(', ');
 
-    novel.summary = $('.summary-content').text().trim();
-
     const chapters: Plugin.ChapterItem[] = [];
-    $('#releases a.chapter-link').each((i, el) => {
-      const chapterName = $(el).find('span.chapter-title').text().trim();
-      const chapterPath = $(el).attr('href');
-      const releaseDate = $(el).find('span.chapter-update').text().trim();
 
-      if (chapterPath) {
-        chapters.push({
-          name: chapterName,
-          path: chapterPath.substring(this.site.length),
-          releaseTime: releaseDate,
-        });
-      }
-    });
+    // Parse chapters from the releases page
+    $('h3:contains("Table of Contents")')
+      .next(
+        'div.p-2.overflow-hidden.border.border-accent-border.rounded.shadow',
+      )
+      .find('a.flex.items-center.p-2.rounded')
+      .each((i, el) => {
+        let chapterName = '';
+        const $chapterElement = $(el);
+
+        // Try to get chapter name from various possible locations
+        const $spanMl1 = $chapterElement.find('span.ml-1');
+        if ($spanMl1.length > 0) {
+          chapterName = $spanMl1.text().trim();
+        } else {
+          // For spliced novels, look for chapter text in the element
+          const textContent = $chapterElement.text().trim();
+          if (textContent) {
+            // Extract chapter number and title from text
+            chapterName = textContent;
+          }
+        }
+
+        const chapterPath = $chapterElement.attr('href');
+        const releaseTime = $chapterElement.find('span.text-xs').text().trim();
+
+        if (chapterPath && chapterName) {
+          chapters.push({
+            name: chapterName,
+            path: chapterPath.replace(this.site, ''),
+            releaseTime: releaseTime,
+          });
+        }
+      });
 
     novel.chapters = chapters;
     return novel;
@@ -136,10 +193,13 @@ class ReadHivePlugin implements Plugin.PluginBase {
     const body = await result.text();
     const $ = loadCheerio(body);
 
-    const content = $('div.text-left');
+    // Use the correct selector that matches the actual HTML structure
+    const content = $('div.justify-center.flex-grow.mx-auto.prose');
     content.find('div.socials').remove();
     content.find('div.reader-settings').remove();
     content.find('div.nav-wrapper').remove();
+    content.find('div.code-block').remove(); // Remove code blocks
+    content.find('p:contains("• • •")').remove(); // Remove specific separator
 
     return content.html() || '';
   }

@@ -14,6 +14,7 @@
     "publish:plugins": "chmod +x ./scripts/publish-plugins.sh && ./scripts/publish-plugins.sh",
     "publish:plugins:windows": "powershell ./scripts/publish-plugins.ps1",
     "serve:dev": "npm run build:compile && npm run build:manifest:dev && serve",
+    "dev:start": "vite",
     "lint": "npx eslint .",
     "lint:fix": "npx eslint . --fix",
     "format": "prettier --write \"./**/*.{js,ts}\"",
