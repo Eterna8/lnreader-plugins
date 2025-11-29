@@ -19,8 +19,7 @@ const USER_CONTENT_LINK = process.env.USER_CONTENT_BASE
   : `https://raw.githubusercontent.com/${USERNAME}/${REPO}/${CURRENT_BRANCH}`;
 
 const STATIC_LINK = `${USER_CONTENT_LINK}/public/static`;
-// Use legacy .js/src/plugins path for backward compatibility
-const PLUGIN_LINK = `${USER_CONTENT_LINK}/.js/src/plugins`;
+const PLUGIN_LINK = `${USER_CONTENT_LINK}/plugins`;
 
 const DIST_DIR = '.dist';
 
@@ -137,7 +136,10 @@ for (let language in languages) {
       site,
       lang: languages[language],
       version,
-      url: `${PLUGIN_LINK}/${language.toLowerCase()}/${plugin}`,
+      url: `${PLUGIN_LINK}/${language.toLowerCase()}/${plugin.replace(
+        '.js',
+        '.ts',
+      )}`,
       iconUrl: `${STATIC_LINK}/${icon || 'siteNotAvailable.png'}`,
       customJS: customJS ? `${STATIC_LINK}/${customJS}` : undefined,
       customCSS: customCSS ? `${STATIC_LINK}/${customCSS}` : undefined,
