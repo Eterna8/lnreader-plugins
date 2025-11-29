@@ -1,4 +1,4 @@
-import { Plugin } from '@libs/plugin';
+import { Plugin } from '@/types/plugin';
 import { load, CheerioAPI } from 'cheerio';
 import { fetchApi } from '@libs/fetch';
 import { defaultCover } from '@libs/defaultCover';
@@ -8,13 +8,14 @@ import dayjs from 'dayjs';
 const includesAny = (str: string, keywords: string[]) =>
   new RegExp(keywords.join('|')).test(str);
 
+import { Filters } from '@libs/filterInputs';
 class BelleRepositoryPlugin implements Plugin.PluginBase {
   id = 'bellerepository';
   name = 'Belle Repository';
-  icon = 'src/en/bellerepository/mainducky.png';
+  icon = 'src/en/bellerepository/icon.png';
   site = 'https://bellerepository.com/';
-  version = '1.0.2';
-  filters = [];
+  version = '1.0.3';
+  filters: Filters | undefined = undefined;
 
   private async getCheerio(
     url: string,
