@@ -99,40 +99,25 @@ class ReadHivePlugin implements Plugin.PluginBase {
       name: 'UNKNOWN',
       chapters: [],
     };
-
-    // Check if this is a spliced novel or normal novel and fetch the appropriate page
-    const isSplicedNovel = novelPath.includes('/series/');
-    let url: string;
-
-    if (isSplicedNovel) {
-      // For series pages, check if we need to add #releases for chapter list
-      url = this.resolveUrl(
-        novelPath + (novelPath.includes('#') ? '' : '#releases'),
-      );
-    } else {
-      url = this.resolveUrl(novelPath);
-    }
-
+    const url = this.resolveUrl(novelPath);
     const result = await fetchApi(url);
     const body = await result.text();
     const $ = loadCheerio(body);
 
-    // Get novel name from the main page (without hash)
-    const mainPageUrl = this.resolveUrl(novelPath.split('#')[0]);
-    const mainResult = await fetchApi(mainPageUrl);
-    const mainBody = await mainResult.text();
-    const $main = loadCheerio(mainBody);
-
-    novel.name = $main('h1.flex-grow.flex-shrink.mb-1.text-2xl.font-bold')
+    novel.name = $(
+      'h1.flex-grow.flex-shrink.mb-1.text-2xl.font-bold.lg:text-3xl.line-clamp-4',
+    )
       .text()
       .trim();
     novel.cover = this.resolveUrl(
-      $main('div.rounded.overflow-hidden img').attr('src') || defaultCover,
+      $(
+        'div.aspect-w-3.aspect-h-4.lg:aspect-w-4.lg:aspect-h-6.rounded.overflow-hidden img',
+      ).attr('src') || defaultCover,
     );
-    novel.author = $main('span.leading-7').text().trim();
+    novel.author = $('span.leading-7.md:text-xl').text().trim();
 
     const summaryParagraphs: string[] = [];
-    $main('h2:contains("Synopsis")')
+    $('h2:contains("Synopsis")')
       .next('div.mb-4')
       .find('p')
       .each((i, el) => {
@@ -141,40 +126,25 @@ class ReadHivePlugin implements Plugin.PluginBase {
     novel.summary = summaryParagraphs.join('\n');
 
     const genres: string[] = [];
-    $main('div.flex.flex-wrap a.px-3.py-1.mb-1.mr-2').each(function () {
+    $(
+      'div.flex.flex-wrap a.px-3.py-1.mb-1.mr-2.text-sm.text-foreground.bg-shade.rounded.shadow-md.hover:bg-red.hover:text-white',
+    ).each(function () {
       genres.push($(this).text());
     });
     novel.genres = genres.join(', ');
 
     const chapters: Plugin.ChapterItem[] = [];
-
-    // Parse chapters from the releases page
     $('h3:contains("Table of Contents")')
       .next(
         'div.p-2.overflow-hidden.border.border-accent-border.rounded.shadow',
       )
-      .find('a.flex.items-center.p-2.rounded')
+      .find('a.flex.items-center.p-2.rounded.bg-accent.hover:bg-accent-hover')
       .each((i, el) => {
-        let chapterName = '';
-        const $chapterElement = $(el);
+        const chapterName = $(el).find('span.ml-1').text().trim();
+        const chapterPath = $(el).attr('href');
+        const releaseTime = $(el).find('span.text-xs').text().trim();
 
-        // Try to get chapter name from various possible locations
-        const $spanMl1 = $chapterElement.find('span.ml-1');
-        if ($spanMl1.length > 0) {
-          chapterName = $spanMl1.text().trim();
-        } else {
-          // For spliced novels, look for chapter text in the element
-          const textContent = $chapterElement.text().trim();
-          if (textContent) {
-            // Extract chapter number and title from text
-            chapterName = textContent;
-          }
-        }
-
-        const chapterPath = $chapterElement.attr('href');
-        const releaseTime = $chapterElement.find('span.text-xs').text().trim();
-
-        if (chapterPath && chapterName) {
+        if (chapterPath) {
           chapters.push({
             name: chapterName,
             path: chapterPath.replace(this.site, ''),
@@ -193,8 +163,7 @@ class ReadHivePlugin implements Plugin.PluginBase {
     const body = await result.text();
     const $ = loadCheerio(body);
 
-    // Use the correct selector that matches the actual HTML structure
-    const content = $('div.justify-center.flex-grow.mx-auto.prose');
+    const content = $('div.relative.lg:grid-in-content.mt-4');
     content.find('div.socials').remove();
     content.find('div.reader-settings').remove();
     content.find('div.nav-wrapper').remove();
