@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(node scripts/build-plugin-manifest:*)"
+      "Bash(node scripts/build-plugin-manifest:*)",
+      "Bash(curl:*)",
+      "Bash(cp:*)",
+      "Bash(rm:*)",
+      "Bash(npm run build:compile:*)",
+      "Bash(npm run build:manifest:*)"
     ],
     "deny": [],
     "ask": []

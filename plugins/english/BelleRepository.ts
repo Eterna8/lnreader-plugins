@@ -11,7 +11,7 @@ const includesAny = (str: string, keywords: string[]) =>
 class BelleRepositoryPlugin implements Plugin.PluginBase {
   id = 'bellerepository';
   name = 'Belle Repository';
-  icon = 'src/en/bellerepository/icon.png';
+  icon = 'src/en/bellerepository/mainducky.png';
   site = 'https://bellerepository.com/';
   version = '1.0.2';
   filters = [];

@@ -6,7 +6,7 @@
 		"lang": "English",
 		"version": "1.0.2",
 		"url": "https://raw.githubusercontent.com/Eterna8/ext/master/.js/plugins/english/BelleRepository.js",
-		"iconUrl": "https://raw.githubusercontent.com/Eterna8/ext/master/public/static/src/en/bellerepository/icon.png"
+		"iconUrl": "https://raw.githubusercontent.com/Eterna8/ext/master/public/static/src/en/bellerepository/mainducky.png"
 	},
 	{
 		"id": "readhive",
@@ -15,6 +15,6 @@
 		"lang": "English",
 		"version": "2.0.0",
 		"url": "https://raw.githubusercontent.com/Eterna8/ext/master/.js/plugins/english/ReadHive.js",
-		"iconUrl": "https://raw.githubusercontent.com/Eterna8/ext/master/public/static/src/en/readhive/icon.jpg"
+		"iconUrl": "https://raw.githubusercontent.com/Eterna8/ext/master/public/static/src/en/readhive/FO721D5FA0CC7-02-scaled-e1658075230203-150x150.jpg"
 	}
 ]

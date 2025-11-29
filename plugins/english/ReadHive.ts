@@ -7,7 +7,7 @@ import { defaultCover } from '@libs/defaultCover';
 class ReadHivePlugin implements Plugin.PluginBase {
   id = 'readhive';
   name = 'ReadHive';
-  icon = 'src/en/readhive/icon.jpg';
+  icon = 'src/en/readhive/FO721D5FA0CC7-02-scaled-e1658075230203-150x150.jpg';
   site = 'https://readhive.org';
   version = '2.0.0';
   filters: Filters | undefined = undefined;
