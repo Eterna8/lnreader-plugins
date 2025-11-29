@@ -140,7 +140,7 @@ for (let language in languages) {
         '.js',
         '.ts',
       )}`,
-      iconUrl: `${STATIC_LINK}/${icon || 'siteNotAvailable.png'}`,
+      iconUrl: `${PLUGIN_LINK}/${language.toLowerCase()}/${id}/${icon}`,
       customJS: customJS ? `${STATIC_LINK}/${customJS}` : undefined,
       customCSS: customCSS ? `${STATIC_LINK}/${customCSS}` : undefined,
     };
