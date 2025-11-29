@@ -19,7 +19,8 @@ const USER_CONTENT_LINK = process.env.USER_CONTENT_BASE
   : `https://raw.githubusercontent.com/${USERNAME}/${REPO}/${CURRENT_BRANCH}`;
 
 const STATIC_LINK = `${USER_CONTENT_LINK}/public/static`;
-const PLUGIN_LINK = `${USER_CONTENT_LINK}/plugins`;
+// Use legacy .js/src/plugins path for backward compatibility
+const PLUGIN_LINK = `${USER_CONTENT_LINK}/.js/plugins`;
 
 const DIST_DIR = '.dist';
 
@@ -86,9 +87,6 @@ const _require = () => proxy;
 const COMPILED_PLUGIN_DIR = './.js/plugins';
 
 for (let language in languages) {
-  if (language.toLowerCase() !== 'english') {
-    continue;
-  }
   console.log(
     ` ${language} `
       .padStart(Math.floor((language.length + 32) / 2), '=')
@@ -136,11 +134,8 @@ for (let language in languages) {
       site,
       lang: languages[language],
       version,
-      url: `${PLUGIN_LINK}/${language.toLowerCase()}/${plugin.replace(
-        '.js',
-        '.ts',
-      )}`,
-      iconUrl: `${PLUGIN_LINK}/${language.toLowerCase()}/${id}/${icon}`,
+      url: `${PLUGIN_LINK}/${language.toLowerCase()}/${plugin}`,
+      iconUrl: `${STATIC_LINK}/${icon || 'siteNotAvailable.png'}`,
       customJS: customJS ? `${STATIC_LINK}/${customJS}` : undefined,
       customCSS: customCSS ? `${STATIC_LINK}/${customCSS}` : undefined,
     };
@@ -207,10 +202,8 @@ if (!ONLY_NEW)
     `,
   );
 
+// check for broken plugins
 for (let language in languages) {
-  if (language.toLowerCase() !== 'english') {
-    continue;
-  }
   const tsFiles = fs.readdirSync(
     path.join('./plugins', language.toLocaleLowerCase()),
   );
@@ -237,9 +230,6 @@ const totalPluginsWithFilter = Object.values(
 console.warn('\n| Language | Plugins (With Filters) |');
 console.warn('|----------|------------------------|');
 for (const language of Object.keys(languages)) {
-  if (language.toLowerCase() !== 'english') {
-    continue;
-  }
   console.warn(
     `| ${language} | ${pluginsPerLanguage[language] || 0} (${pluginsWithFiltersPerLanguage[language] || 0}) |`,
   );
