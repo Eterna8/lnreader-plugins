@@ -77,74 +77,85 @@ class ReadHivePlugin implements Plugin.PluginBase {
       console.log('Search term:', searchTerm);
       console.log('Page:', pageNo);
 
-      // New approach: Scrape browse page and filter locally
-      console.log('Scraping browse page for all novels...');
+      // Use WordPress REST API to search for posts
+      const searchUrl = `${this.site}/wp-json/wp/v2/posts?search=${encodeURIComponent(searchTerm)}&per_page=20&page=${pageNo}`;
+      console.log('Making WordPress API request to:', searchUrl);
 
-      const result = await fetchApi(`${this.site}/browse-series/`);
+      const result = await fetchApi(searchUrl);
       console.log('Response status:', result.status);
 
       const text = await result.text();
-      console.log('Response length:', text.length, 'characters');
+      console.log(
+        'Response type:',
+        typeof text === 'string' ? 'text' : 'other',
+      );
 
-      const $ = loadCheerio(text);
+      // Try to parse as JSON first
+      let jsonData;
+      try {
+        jsonData = JSON.parse(text);
+        console.log('Successfully parsed JSON response');
+      } catch (e) {
+        console.log(
+          'Failed to parse JSON as WordPress API, falling back to HTML parsing',
+        );
+        const $ = loadCheerio(text);
+        const novels: Plugin.NovelItem[] = [];
 
-      const allNovels: Plugin.NovelItem[] = [];
+        // Look for WordPress post structure in HTML
+        $('article').each((i, el) => {
+          const titleEl = $(el).find('h1, h2, h3').first();
+          const linkEl = $(el).find('a').first();
+          const imgEl = $(el).find('img').first();
 
-      // Look for novel entries on browse page with multiple selectors
-      console.log('Searching for any links in HTML...');
+          if (titleEl && linkEl && imgEl) {
+            const name = titleEl.text().trim();
+            const path = linkEl.attr('href');
+            const cover = imgEl.attr('src');
 
-      $('a').each((i, el) => {
-        const path = $(el).attr('href');
-        if (path && !path.includes('page')) {
-          const name = $(el).find('img').attr('alt') || $(el).text().trim();
-          let cover = $(el).find('img').attr('src');
-
-          // Debug: log first few links found
-          if (i < 5) {
-            console.log(`Found link ${i}:`, path);
-            console.log(`Name:`, name);
-            console.log(`Cover:`, cover);
-          }
-
-          if (name && cover) {
-            const novel: Plugin.NovelItem = {
-              name: name,
-              path: path.replace(this.site, ''),
-              cover: cover.startsWith('http') ? cover : this.resolveUrl(cover),
-            };
-
-            // Avoid duplicates
-            if (!allNovels.find(n => n.path === novel.path)) {
-              allNovels.push(novel);
+            if (name && path && path.includes('/series/')) {
+              const novel: Plugin.NovelItem = {
+                name: name,
+                path: path.replace(this.site, ''),
+                cover:
+                  cover && cover.startsWith('http')
+                    ? cover
+                    : this.resolveUrl(cover),
+              };
+              novels.push(novel);
+              console.log('Found novel via HTML fallback:', name);
             }
           }
-        }
-      });
+        });
 
-      console.log('Total novels found on browse page:', allNovels.length);
+        console.log('=== SEARCH DEBUG END ===');
+        console.log('Returning', novels.length, 'novels');
+        return novels;
+      }
 
-      // Filter novels based on search term (case-insensitive)
-      const searchLower = searchTerm.toLowerCase();
-      const filteredNovels = allNovels.filter(novel =>
-        novel.name.toLowerCase().includes(searchLower),
-      );
+      // If we got JSON data, process it
+      const novels: Plugin.NovelItem[] = [];
 
-      console.log('Novels matching search term:', filteredNovels.length);
+      if (Array.isArray(jsonData)) {
+        jsonData.forEach((post: any) => {
+          if (post.link && post.title && post.link.includes('/series/')) {
+            const novel: Plugin.NovelItem = {
+              name: post.title.rendered || post.title.raw || post.title,
+              path: post.link.replace(this.site, ''),
+              cover:
+                post.featured_media && post.featured_media.source_url
+                  ? post.featured_media.source_url
+                  : '',
+            };
+            novels.push(novel);
+            console.log('Found novel via JSON:', novel.name);
+          }
+        });
+      }
 
-      // Apply pagination to filtered results
-      const startIndex = (pageNo - 1) * 20; // 20 novels per page
-      const endIndex = startIndex + 20;
-      const paginatedNovels = filteredNovels.slice(startIndex, endIndex);
-
-      console.log(
-        'Returning',
-        paginatedNovels.length,
-        'novels for page',
-        pageNo,
-      );
+      console.log('Total novels found:', novels.length);
       console.log('=== SEARCH DEBUG END ===');
-
-      return paginatedNovels;
+      return novels;
     } catch (error) {
       console.error('=== SEARCH ERROR ===');
       console.error('Error:', error);
