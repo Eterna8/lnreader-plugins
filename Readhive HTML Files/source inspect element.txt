@@ -5,13 +5,13 @@ fetch.ts:55 https://readhive.org {headers: {…}}
 ReadHive.ts:76 === SEARCH DEBUG START ===
 ReadHive.ts:77 Search term: seed
 ReadHive.ts:78 Page: 1
-ReadHive.ts:89 Making AJAX request to: https://readhive.org/ajax
-ReadHive.ts:90 Request payload: query = seed
+ReadHive.ts:90 Making AJAX request to: https://readhive.org/ajax
+ReadHive.ts:91 Request payload: action = fetch_browse, search = seed
 fetch.ts:55 https://readhive.org/ajax {method: 'POST', body: FormData, headers: {…}}
-ReadHive.ts:97 Response status: 200
-ReadHive.ts:100 Response text (first 500 chars): {"success":false,"data":{"message":"Unspecified request."}}
-ReadHive.ts:105 JSON parsed successfully
-ReadHive.ts:177 No posts found in JSON response
-ReadHive.ts:178 Response structure: (2) ['success', 'data']
-ReadHive.ts:181 === SEARCH DEBUG END ===
-ReadHive.ts:182 Returning 0 novels
+ReadHive.ts:101 Response status: 200
+ReadHive.ts:104 Response text (first 500 chars): {"success":false,"data":"Invalid post"}
+ReadHive.ts:109 JSON parsed successfully
+ReadHive.ts:181 No posts found in JSON response
+ReadHive.ts:182 Response structure: (2) ['success', 'data']
+ReadHive.ts:185 === SEARCH DEBUG END ===
+ReadHive.ts:186 Returning 0 novels
