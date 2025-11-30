@@ -78,7 +78,7 @@ class ReadHivePlugin implements Plugin.PluginBase {
       console.log('Page:', pageNo);
 
       // Try GET request approach with search parameter
-      let searchUrl = `${this.site}/browse-series/?search=${encodeURIComponent(searchTerm)}`;
+      let searchUrl = `${this.site}/browse-series/?search=${encodeURIComponent(searchTerm)}&orderBy=recent`;
       if (pageNo > 1) {
         searchUrl += `&page=${pageNo}`;
       }
