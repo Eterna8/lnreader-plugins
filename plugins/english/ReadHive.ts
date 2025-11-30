@@ -72,48 +72,36 @@ class ReadHivePlugin implements Plugin.PluginBase {
     searchTerm: string,
     pageNo: number,
   ): Promise<Plugin.NovelItem[]> {
-    // ReadHive needs THIS **exact** form payload
+    // ReadHive doesn't paginate search results
+    if (pageNo > 1) return [];
+
+    // Build the exact FormData payload
     const form = new FormData();
     form.append('search', searchTerm);
-    form.append('orderBy', 'recent'); // site ALWAYS uses "recent"
-    form.append('post', '60916bbfb9'); // taken from x-data="browse('...')"
-    form.append('action', 'fetch_browse'); // required action
+    form.append('orderBy', 'recent');
+    form.append('post', '60916bbfb9');
+    form.append('action', 'fetch_browse');
 
-    // Perform the AJAX request
     const result = await fetchApi(`${this.site}/ajax`, {
       method: 'POST',
       body: form,
     });
 
-    // Response may be JSON or raw HTML
-    const raw = await result.text();
-    let html = raw;
+    const json = await result.json();
 
-    // If it's JSON, extract the HTML portion
-    try {
-      const json = JSON.parse(raw);
-      if (json && json.html) html = json.html;
-    } catch (_) {}
+    // Check if the response is successful
+    if (!json.success || !json.data || !json.data.posts) {
+      return [];
+    }
 
-    // Now parse the returned HTML fragment
-    const $ = loadCheerio(html);
-    const novels: Plugin.NovelItem[] = [];
-
-    // These are where ReadHive's AJAX search cards appear
-    $('div.px-2.mb-4').each((i, el) => {
-      const path = $(el).find('a.peer').attr('href');
-      const name = $(el).find('a.text-lg').text().trim();
-      let cover = $(el).find('img').attr('src');
-
-      if (path && name) {
-        if (cover && !cover.startsWith('http')) cover = this.resolveUrl(cover);
-        novels.push({
-          name,
-          path,
-          cover: cover || defaultCover,
-        });
-      }
-    });
+    // Map the posts array to NovelItem objects
+    const novels: Plugin.NovelItem[] = json.data.posts.map((post: any) => ({
+      name: post.title,
+      path: post.permalink.replace(this.site, ''),
+      cover: post.thumbnail.startsWith('http')
+        ? post.thumbnail
+        : this.resolveUrl(post.thumbnail),
+    }));
 
     return novels;
   }
