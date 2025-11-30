@@ -77,56 +77,47 @@ class ReadHivePlugin implements Plugin.PluginBase {
       console.log('Search term:', searchTerm);
       console.log('Page:', pageNo);
 
-      // Build the FormData payload
-      const form = new FormData();
-      form.append('search', searchTerm);
-      form.append('orderBy', 'recent');
-      form.append('post', '60916bbfb9');
-      form.append('action', 'fetch_browse');
-
+      // Try GET request approach with search parameter
+      let searchUrl = `${this.site}/browse-series/?search=${encodeURIComponent(searchTerm)}`;
       if (pageNo > 1) {
-        form.append('page', pageNo.toString());
+        searchUrl += `&page=${pageNo}`;
       }
 
-      console.log('Making request to:', `${this.site}/ajax`);
+      console.log('Making GET request to:', searchUrl);
 
-      const result = await fetchApi(`${this.site}/ajax`, {
-        method: 'POST',
-        body: form,
-      });
+      const result = await fetchApi(searchUrl);
 
       console.log('Response status:', result.status);
 
       const text = await result.text();
-      console.log('Response text (first 500 chars):', text.substring(0, 500));
+      console.log('Response text (first 1000 chars):', text.substring(0, 1000));
 
-      const json = JSON.parse(text);
-      console.log('JSON parsed successfully');
-      console.log('json.success:', json.success);
-      console.log('json.data exists:', !!json.data);
+      // Parse HTML response using Cheerio
+      const $ = loadCheerio(text);
 
-      if (json.data) {
-        console.log('json.data.posts exists:', !!json.data.posts);
-        console.log('json.data.posts length:', json.data.posts?.length);
-      }
+      const novels: Plugin.NovelItem[] = [];
 
-      // Check if the response is successful
-      if (!json.success || !json.data || !json.data.posts) {
-        console.log('Response check failed, returning empty array');
-        return [];
-      }
+      // Look for novel entries in the HTML structure
+      $('a[href*="/series/"]').each((i, el) => {
+        const path = $(el).attr('href');
+        if (path && !path.includes('page')) {
+          const name = $(el).find('img').attr('alt') || $(el).text().trim();
+          let cover = $(el).find('img').attr('src');
 
-      // Map the posts array to NovelItem objects
-      const novels: Plugin.NovelItem[] = json.data.posts.map((post: any) => {
-        const novel = {
-          name: post.title,
-          path: post.permalink.replace(this.site, ''),
-          cover: post.thumbnail.startsWith('http')
-            ? post.thumbnail
-            : this.resolveUrl(post.thumbnail),
-        };
-        console.log('Mapped novel:', novel.name);
-        return novel;
+          if (name && cover) {
+            const novel: Plugin.NovelItem = {
+              name: name,
+              path: path.replace(this.site, ''),
+              cover: cover.startsWith('http') ? cover : this.resolveUrl(cover),
+            };
+
+            // Avoid duplicates
+            if (!novels.find(n => n.path === novel.path)) {
+              novels.push(novel);
+              console.log('Found novel:', novel.name);
+            }
+          }
+        }
       });
 
       console.log('=== SEARCH DEBUG END ===');
