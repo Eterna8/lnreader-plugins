@@ -32,7 +32,6 @@ class ReadHivePlugin implements Plugin.PluginBase {
     const processedPaths = new Set<string>();
 
     if (options.showLatestNovels) {
-      // Latest Updates section
       $('h2:contains("Latest Updates")')
         .next('.flex-wrap')
         .find('.px-2.mb-4')
@@ -49,7 +48,6 @@ class ReadHivePlugin implements Plugin.PluginBase {
           }
         });
     } else {
-      // Popular sections
       $('h2:contains("Popular")')
         .nextAll('.swiper')
         .find('.swiper-slide')
@@ -74,25 +72,50 @@ class ReadHivePlugin implements Plugin.PluginBase {
     searchTerm: string,
     pageNo: number,
   ): Promise<Plugin.NovelItem[]> {
-    const url = `${this.site}/?s=${searchTerm}&page=${pageNo}`;
-    const result = await fetchApi(url);
-    const body = await result.text();
-    const $ = loadCheerio(body);
+    // ReadHive needs THIS **exact** form payload
+    const form = new FormData();
+    form.append('search', searchTerm);
+    form.append('orderBy', 'recent'); // site ALWAYS uses "recent"
+    form.append('post', '60916bbfb9'); // taken from x-data="browse('...')"
+    form.append('action', 'fetch_browse'); // required action
 
-    return $('div.col-6.col-md-3.mb-4')
-      .map((i, el) => {
-        const path = $(el).find('a').attr('href');
-        if (!path) return null;
+    // Perform the AJAX request
+    const result = await fetchApi(`${this.site}/ajax`, {
+      method: 'POST',
+      body: form,
+    });
 
-        const name = $(el).find('h5').text().trim();
-        let cover = $(el).find('img').attr('src');
-        if (cover && !cover.startsWith('http')) {
-          cover = this.resolveUrl(cover);
-        }
-        return { name, path, cover: cover || defaultCover };
-      })
-      .get()
-      .filter(Boolean) as Plugin.NovelItem[];
+    // Response may be JSON or raw HTML
+    const raw = await result.text();
+    let html = raw;
+
+    // If it's JSON, extract the HTML portion
+    try {
+      const json = JSON.parse(raw);
+      if (json && json.html) html = json.html;
+    } catch (_) {}
+
+    // Now parse the returned HTML fragment
+    const $ = loadCheerio(html);
+    const novels: Plugin.NovelItem[] = [];
+
+    // These are where ReadHive's AJAX search cards appear
+    $('div.px-2.mb-4').each((i, el) => {
+      const path = $(el).find('a.peer').attr('href');
+      const name = $(el).find('a.text-lg').text().trim();
+      let cover = $(el).find('img').attr('src');
+
+      if (path && name) {
+        if (cover && !cover.startsWith('http')) cover = this.resolveUrl(cover);
+        novels.push({
+          name,
+          path,
+          cover: cover || defaultCover,
+        });
+      }
+    });
+
+    return novels;
   }
 
   async parseNovel(novelPath: string): Promise<Plugin.SourceNovel> {
@@ -101,35 +124,33 @@ class ReadHivePlugin implements Plugin.PluginBase {
     const body = await result.text();
     const $ = loadCheerio(body);
 
-    const name = $('h1[class*="text-2xl"]').first().text().trim();
+    const name = $('h1[class*="line-clamp-4"]').text().trim();
     const cover =
       $('img[alt*="Cover"]').attr('src') ||
-      $('img[alt*="Thumbnail"]').attr('src') ||
+      $('img[class*="object-cover"]').attr('src') ||
       defaultCover;
 
     const novel: Plugin.SourceNovel = {
       path: novelPath,
       name: name,
       cover: this.resolveUrl(cover),
-      author: $('span.leading-7').text().trim(),
+      author: $('span[class*="leading-7"]').text().trim(),
       summary: $('h2:contains("Synopsis")').next('div').find('p').text().trim(),
-      genres: $('div.flex-wrap a[href*="/genre/"]')
+      genres: $('div.lg\\:grid-in-info a[href*="/genre/"]')
         .map((i, el) => $(el).text())
         .get()
         .join(', '),
       chapters: [],
     };
 
-    const chapterElements = $('div[x-show="tab === \'releases\'"]').find(
-      'a[href*="/series/"]',
-    );
+    const chapterElements = $('div.grid-cols-1 a[href*="/series/"]');
 
     const chapters: Plugin.ChapterItem[] = chapterElements
       .map((i, el) => {
         const path = $(el).attr('href');
         if (!path) return null;
 
-        const chapterName = $(el).find('span.ml-1').text().trim();
+        const chapterName = $(el).find('span[class*="ml-1"]').text().trim();
         const releaseTime = $(el).find('span.text-xs').text().trim();
 
         return {
@@ -141,7 +162,7 @@ class ReadHivePlugin implements Plugin.PluginBase {
       .get()
       .filter(Boolean) as Plugin.ChapterItem[];
 
-    novel.chapters = chapters;
+    novel.chapters = chapters.reverse();
     return novel;
   }
 
