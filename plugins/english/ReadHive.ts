@@ -77,48 +77,106 @@ class ReadHivePlugin implements Plugin.PluginBase {
       console.log('Search term:', searchTerm);
       console.log('Page:', pageNo);
 
-      // Try GET request approach with search parameter
-      let searchUrl = `${this.site}/browse-series/?search=${encodeURIComponent(searchTerm)}&orderBy=recent`;
+      // Try correct AJAX request format found in JavaScript
+      const form = new FormData();
+      form.append('query', searchTerm);
+
+      // Add pagination if needed
       if (pageNo > 1) {
-        searchUrl += `&page=${pageNo}`;
+        form.append('page', pageNo.toString());
       }
 
-      console.log('Making GET request to:', searchUrl);
+      console.log('Making AJAX request to:', `${this.site}/ajax`);
+      console.log('Request payload: query =', searchTerm);
 
-      const result = await fetchApi(searchUrl);
+      const result = await fetchApi(`${this.site}/ajax`, {
+        method: 'POST',
+        body: form,
+      });
 
       console.log('Response status:', result.status);
 
       const text = await result.text();
-      console.log('Response text (first 1000 chars):', text.substring(0, 1000));
+      console.log('Response text (first 500 chars):', text.substring(0, 500));
 
-      // Parse HTML response using Cheerio
-      const $ = loadCheerio(text);
+      let json;
+      try {
+        json = JSON.parse(text);
+        console.log('JSON parsed successfully');
+      } catch (e) {
+        console.log('Failed to parse JSON, falling back to HTML parsing');
+        // Fallback to HTML parsing if JSON fails
+        const $ = loadCheerio(text);
+        const novels: Plugin.NovelItem[] = [];
+        $('a[href*="/series/"]').each((i, el) => {
+          const path = $(el).attr('href');
+          if (path && !path.includes('page')) {
+            const name = $(el).find('img').attr('alt') || $(el).text().trim();
+            let cover = $(el).find('img').attr('src');
+            if (name && cover) {
+              const novel: Plugin.NovelItem = {
+                name: name,
+                path: path.replace(this.site, ''),
+                cover: cover.startsWith('http')
+                  ? cover
+                  : this.resolveUrl(cover),
+              };
+              if (!novels.find(n => n.path === novel.path)) {
+                novels.push(novel);
+                console.log('Found novel via HTML fallback:', novel.name);
+              }
+            }
+          }
+        });
+        console.log('=== SEARCH DEBUG END ===');
+        console.log('Returning', novels.length, 'novels (HTML fallback)');
+        return novels;
+      }
 
       const novels: Plugin.NovelItem[] = [];
 
-      // Look for novel entries in the HTML structure
-      $('a[href*="/series/"]').each((i, el) => {
-        const path = $(el).attr('href');
-        if (path && !path.includes('page')) {
-          const name = $(el).find('img').attr('alt') || $(el).text().trim();
-          let cover = $(el).find('img').attr('src');
-
-          if (name && cover) {
+      // Check if we have search results in the expected format
+      if (json.data && json.data.posts) {
+        console.log('Found', json.data.posts.length, 'posts in response');
+        json.data.posts.forEach((post: any) => {
+          if (post.permalink && post.title) {
             const novel: Plugin.NovelItem = {
-              name: name,
-              path: path.replace(this.site, ''),
-              cover: cover.startsWith('http') ? cover : this.resolveUrl(cover),
+              name: post.title,
+              path: post.permalink.replace(this.site, ''),
+              cover:
+                post.thumbnail && post.thumbnail.startsWith('http')
+                  ? post.thumbnail
+                  : post.thumbnail
+                    ? this.resolveUrl(post.thumbnail)
+                    : '',
             };
-
-            // Avoid duplicates
-            if (!novels.find(n => n.path === novel.path)) {
-              novels.push(novel);
-              console.log('Found novel:', novel.name);
-            }
+            novels.push(novel);
+            console.log('Found novel via JSON:', novel.name);
           }
-        }
-      });
+        });
+      } else if (json.posts) {
+        // Alternative JSON structure
+        console.log('Found', json.posts.length, 'posts in alternative format');
+        json.posts.forEach((post: any) => {
+          if (post.permalink && post.title) {
+            const novel: Plugin.NovelItem = {
+              name: post.title,
+              path: post.permalink.replace(this.site, ''),
+              cover:
+                post.thumbnail && post.thumbnail.startsWith('http')
+                  ? post.thumbnail
+                  : post.thumbnail
+                    ? this.resolveUrl(post.thumbnail)
+                    : '',
+            };
+            novels.push(novel);
+            console.log('Found novel via alternative JSON:', novel.name);
+          }
+        });
+      } else {
+        console.log('No posts found in JSON response');
+        console.log('Response structure:', Object.keys(json));
+      }
 
       console.log('=== SEARCH DEBUG END ===');
       console.log('Returning', novels.length, 'novels');
