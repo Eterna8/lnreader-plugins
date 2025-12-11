@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(git merge --no-ff origin/master -m \"Merge remote master\")",
-      "Bash(git reset --hard HEAD~0)"
-    ]
-  }
-}
