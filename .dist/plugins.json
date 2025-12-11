@@ -13,8 +13,17 @@
 		"name": "ReadHive",
 		"site": "https://readhive.org",
 		"lang": "English",
-		"version": "2.0.0",
+		"version": "2.0.1",
 		"url": "https://raw.githubusercontent.com/Eterna8/ext/master/.js/plugins/english/ReadHive.js",
 		"iconUrl": "https://raw.githubusercontent.com/Eterna8/ext/master/public/static/src/en/readhive/FO721D5FA0CC7-02-scaled-e1658075230203-150x150.jpg"
+	},
+	{
+		"id": "tangerinearchive",
+		"name": "Tangerine Archive",
+		"site": "https://tangerinearchive.com/",
+		"lang": "English",
+		"version": "1.0.1",
+		"url": "https://raw.githubusercontent.com/Eterna8/ext/master/.js/plugins/english/TangerineArchive.js",
+		"iconUrl": "https://raw.githubusercontent.com/Eterna8/ext/master/public/static/src/en/tangerinearchive/talogo.png"
 	}
 ]

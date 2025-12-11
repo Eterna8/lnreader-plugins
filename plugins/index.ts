@@ -4,6 +4,7 @@ import p_1 from '@plugins/arabic/rewayatclub';
 import p_2 from '@plugins/arabic/sunovels';
 import p_3 from '@plugins/english/BelleRepository';
 import p_4 from '@plugins/english/ReadHive';
+import p_5 from '@plugins/english/TangerineArchive';
 
-const PLUGINS: Plugin.PluginBase[] = [p_0, p_1, p_2, p_3, p_4];
+const PLUGINS: Plugin.PluginBase[] = [p_0, p_1, p_2, p_3, p_4, p_5];
 export default PLUGINS;
